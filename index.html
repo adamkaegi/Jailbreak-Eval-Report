@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evaluating Inference-Time Defences Against Jailbreak Attacks</title>
+<meta name="description" content="A controlled evaluation of ten inference-time defence configurations against four jailbreak attack families, measuring attack success alongside benign refusal, latency, and model-call cost.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --paper:#F3F4F1;
+  --card:#FFFFFF;
+  --ink:#12161A;
+  --muted:#5F696F;
+  --rule:#DBDED8;
+  --petrol:#1D4E5C;
+  --crimson:#B92D45;
+
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --cond:"IBM Plex Sans Condensed",var(--sans);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+.narrow{max-width:760px}
+
+/* ---------- masthead ---------- */
+.masthead{padding:72px 0 40px}
+.eyebrow{
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--muted);
+  margin:0 0 20px;
+}
+h1{
+  font-family:var(--cond);
+  font-weight:700;
+  font-size:clamp(34px,6.2vw,62px);
+  line-height:1.03;
+  letter-spacing:-.015em;
+  margin:0 0 24px;
+  max-width:16ch;
+}
+.authors{
+  font-family:var(--mono);
+  font-size:13px;
+  color:var(--muted);
+  margin:0 0 28px;
+}
+.authors strong{color:var(--ink);font-weight:500}
+.standfirst{
+  font-size:19px;
+  line-height:1.55;
+  max-width:62ch;
+  margin:0;
+  color:#2A3238;
+}
+
+/* ---------- matrix ---------- */
+.matrix-block{padding:8px 0 8px}
+.section-label{
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--muted);
+  padding-bottom:10px;
+  border-bottom:1px solid var(--rule);
+  margin:0 0 22px;
+}
+.scroller{overflow-x:auto;padding-bottom:6px}
+table.matrix{
+  border-collapse:separate;
+  border-spacing:3px;
+  font-family:var(--mono);
+  font-size:13px;
+  min-width:660px;
+  width:100%;
+}
+table.matrix th{
+  font-weight:400;
+  color:var(--muted);
+  font-size:11px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  text-align:center;
+  padding:0 0 8px;
+  vertical-align:bottom;
+}
+table.matrix th.rowhead{
+  text-align:left;
+  text-transform:none;
+  letter-spacing:0;
+  font-size:13px;
+  color:var(--ink);
+  padding:0 14px 0 0;
+  white-space:nowrap;
+  width:1%;
+}
+table.matrix th.gap{padding-left:14px}
+table.matrix td{
+  text-align:center;
+  padding:9px 6px;
+  border-radius:2px;
+  font-variant-numeric:tabular-nums;
+  min-width:62px;
+}
+td.benign{margin-left:14px}
+table.matrix tr.divider td,table.matrix tr.divider th{
+  padding-top:16px;
+}
+.group-label{
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--muted);
+  text-align:left !important;
+  padding:20px 0 4px !important;
+}
+.legend{
+  display:flex;
+  flex-wrap:wrap;
+  gap:22px;
+  margin:18px 0 0;
+  font-family:var(--mono);
+  font-size:11.5px;
+  color:var(--muted);
+  letter-spacing:.02em;
+}
+.legend span::before{
+  content:"";
+  display:inline-block;
+  width:9px;height:9px;
+  margin-right:7px;
+  border-radius:1px;
+  vertical-align:baseline;
+}
+.legend .harm::before{background:var(--crimson)}
+.legend .ben::before{background:var(--petrol)}
+
+/* ---------- findings ---------- */
+.findings{padding:64px 0 8px}
+.finding-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:2px;
+  background:var(--rule);
+  border:1px solid var(--rule);
+}
+.finding{background:var(--card);padding:28px 26px 30px}
+.finding .stat{
+  font-family:var(--cond);
+  font-weight:700;
+  font-size:38px;
+  line-height:1;
+  letter-spacing:-.02em;
+  margin:0 0 4px;
+}
+.finding .stat-note{
+  font-family:var(--mono);
+  font-size:11.5px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--muted);
+  margin:0 0 16px;
+}
+.finding h3{
+  font-family:var(--sans);
+  font-weight:500;
+  font-size:16px;
+  margin:0 0 8px;
+}
+.finding p{margin:0;font-size:15px;color:#39424A;line-height:1.55}
+
+/* ---------- report ---------- */
+.report{padding:64px 0 0}
+.report-head{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:16px;
+  border-bottom:1px solid var(--rule);
+  padding-bottom:10px;
+  margin-bottom:24px;
+}
+.report-head .section-label{border:0;padding:0;margin:0}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.btn{
+  font-family:var(--mono);
+  font-size:12.5px;
+  letter-spacing:.03em;
+  text-decoration:none;
+  padding:8px 15px;
+  border:1px solid var(--ink);
+  color:var(--ink);
+  background:transparent;
+  transition:background .15s ease,color .15s ease;
+}
+.btn:hover,.btn:focus-visible{background:var(--ink);color:var(--paper)}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn.primary:hover,.btn.primary:focus-visible{background:var(--petrol);border-color:var(--petrol)}
+
+.viewer{
+  border:1px solid var(--rule);
+  background:var(--card);
+  height:min(88vh,1000px);
+  min-height:520px;
+}
+.viewer iframe{display:block;width:100%;height:100%;border:0}
+.viewer-fallback{
+  padding:40px 26px;
+  text-align:center;
+  color:var(--muted);
+  font-size:15px;
+}
+
+/* ---------- footer ---------- */
+footer{
+  margin-top:64px;
+  border-top:1px solid var(--rule);
+  padding:36px 0 72px;
+}
+.repo{
+  display:block;
+  border:1px solid var(--rule);
+  background:var(--card);
+  padding:22px 24px;
+  text-decoration:none;
+  color:inherit;
+  transition:border-color .15s ease;
+}
+.repo:hover,.repo:focus-visible{border-color:var(--ink)}
+.repo .label{
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--muted);
+  display:block;
+  margin-bottom:8px;
+}
+.repo .url{
+  font-family:var(--mono);
+  font-size:14px;
+  color:var(--petrol);
+  word-break:break-all;
+}
+.colophon{
+  margin:26px 0 0;
+  font-family:var(--mono);
+  font-size:11.5px;
+  color:var(--muted);
+  letter-spacing:.02em;
+}
+
+/* ---------- motion ---------- */
+table.matrix td{opacity:0;animation:cellIn .5s ease forwards}
+@keyframes cellIn{to{opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  table.matrix td{opacity:1;animation:none}
+  *{transition:none !important}
+}
+
+a:focus-visible,.repo:focus-visible{outline:2px solid var(--petrol);outline-offset:3px}
+
+@media (max-width:600px){
+  .masthead{padding:48px 0 32px}
+  .findings{padding:48px 0 8px}
+  .report{padding:48px 0 0}
+  .viewer{height:70vh;min-height:420px}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">CS 453 &middot; University of Waterloo</p>
+    <h1>Evaluating Inference-Time Defences Against Jailbreak Attacks</h1>
+    <p class="authors"><strong>Adam Kaegi</strong> &nbsp;/&nbsp; Ryan Maxin &nbsp;/&nbsp; Vishesh Gupta &nbsp;/&nbsp; Varun Mathur</p>
+    <p class="standfirst">Ten defence configurations, four jailbreak attack families, one fixed target model, 2,500 evaluated responses. The study asks whether inference-time defences generalise beyond the attacks they were built for, whether stacking them helps, and what the protection costs in refused legitimate requests, latency, and model calls.</p>
+  </header>
+
+  <section class="matrix-block">
+    <h2 class="section-label">Attack success rate by defence and attack</h2>
+    <div class="scroller">
+      <table class="matrix" id="matrix">
+        <caption class="visually-hidden" style="position:absolute;left:-9999px">Attack success rate per defence condition across four attack families, with benign refusal rate.</caption>
+      </table>
+    </div>
+    <p class="legend">
+      <span class="harm">Attack success rate &mdash; lower is better</span>
+      <span class="ben">Benign requests refused &mdash; lower is better</span>
+    </p>
+  </section>
+
+  <section class="findings">
+    <h2 class="section-label">What the numbers show</h2>
+    <div class="finding-grid">
+
+      <div class="finding">
+        <p class="stat">100% / 0%</p>
+        <p class="stat-note">GCG blocked &middot; DeepInception blocked</p>
+        <h3>Defences do not generalise</h3>
+        <p>Perplexity filtering caught every adversarial-suffix input and none of the fluent role-play prompts. Strength against one attack family says little about the next.</p>
+      </div>
+
+      <div class="finding">
+        <p class="stat">1 in 200</p>
+        <p class="stat-note">Full stack vs. leaner stack</p>
+        <h3>Layering pays, then stops</h3>
+        <p>The full stack reached 1.0% attack success against the leaner stack's 1.5% &mdash; one additional attack stopped, for five times the model calls.</p>
+      </div>
+
+      <div class="finding">
+        <p class="stat">12% &rarr; 44%</p>
+        <p class="stat-note">Benign requests refused</p>
+        <h3>Protection has a price</h3>
+        <p>Stronger defence configurations refused far more legitimate requests and added roughly 11 seconds of mean response latency. Minimising attack success alone picks the wrong system.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="report">
+    <div class="report-head">
+      <h2 class="section-label">Full report</h2>
+      <div class="actions">
+        <a class="btn primary" id="openPdf" href="report.pdf" target="_blank" rel="noopener">Open in new tab</a>
+        <a class="btn" id="downloadPdf" href="report.pdf" download>Download PDF</a>
+      </div>
+    </div>
+
+    <div class="viewer">
+      <iframe src="report.pdf#view=FitH" title="Evaluating Inference-Time Defences Against Jailbreak Attacks, full report">
+        <p class="viewer-fallback">Your browser cannot display the PDF inline. <a href="report.pdf">Open the report</a> instead.</p>
+      </iframe>
+    </div>
+  </section>
+
+  <footer>
+    <a class="repo" href="https://github.com/adamkaegi/Inference-Time-Defences-Against-Jailbreak-Attacks">
+      <span class="label">Project repository</span>
+      <span class="url">github.com/adamkaegi/Inference-Time-Defences-Against-Jailbreak-Attacks</span>
+    </a>
+    <p class="colophon">Target model qwen2.5:7b-instruct served locally through Ollama. Prompts from JailbreakBench. Attack success judged by HarmBench; refusal judged by WildGuard.</p>
+  </footer>
+
+</div>
+
+<script>
+// Table 2 (attack success rate) with the benign refusal column from Table 3.
+const COLS = ["Direct", "DeepInception", "GCG", "PAIR"];
+const ROWS = [
+  ["Standalone defences", null],
+  ["No defence",                  [4, 66, 20, 6,  12]],
+  ["Self-reminder",               [2,  8,  8, 4,  20]],
+  ["SmoothLLM",                   [6, 42, 16, 8,  14]],
+  ["Perplexity",                  [6, 64,  0, 8,  20]],
+  ["Llama Guard (output)",        [4,  6,  4, 4,  32]],
+  ["Combined stacks", null],
+  ["Self-reminder + LG-out",      [2,  0,  0, 4,  42]],
+  ["Perplexity + SR + LG-out",    [2,  0,  0, 4,  38]],
+  ["Perplexity + Smooth + LG-out",[6,  6,  0, 8,  24]],
+  ["Guard sandwich (in + out)",   [2,  8,  2, 2,  38]],
+  ["Full stack (P+SR+S+LG)",      [0,  2,  0, 2,  44]]
+];
+
+const HARM_MAX = 66, BENIGN_MAX = 44;
+
+function shade(value, max, rgb){
+  const t = Math.pow(value / max, 0.72);
+  const alpha = value === 0 ? 0.05 : 0.10 + 0.88 * t;
+  return {
+    bg: `rgba(${rgb}, ${alpha.toFixed(3)})`,
+    fg: alpha > 0.58 ? "#FFFFFF" : "#12161A"
+  };
+}
+
+const table = document.getElementById("matrix");
+let html = "<thead><tr><th class='rowhead'></th>";
+COLS.forEach(c => html += `<th scope='col'>${c}</th>`);
+html += "<th scope='col' class='gap'>Benign refused</th></tr></thead><tbody>";
+
+let cellIndex = 0;
+ROWS.forEach(([name, values]) => {
+  if (values === null){
+    html += `<tr><th colspan='6' class='group-label'>${name}</th></tr>`;
+    return;
+  }
+  html += `<tr><th scope='row' class='rowhead'>${name}</th>`;
+  values.forEach((v, i) => {
+    const isBenign = i === 4;
+    const {bg, fg} = shade(v, isBenign ? BENIGN_MAX : HARM_MAX, isBenign ? "29, 78, 92" : "185, 45, 69");
+    const delay = (cellIndex++ * 12);
+    html += `<td class="${isBenign ? "benign" : ""}" style="background:${bg};color:${fg};animation-delay:${delay}ms">${v}%</td>`;
+  });
+  html += "</tr>";
+});
+html += "</tbody>";
+table.innerHTML = html;
+</script>
+
+</body>
+</html>
